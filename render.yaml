@@ -1,0 +1,37 @@
+# Render Blueprint — CRM de Cobrança Trapisa (backend)
+# Como usar: no painel do Render, "New +" -> "Blueprint", aponte para este repositório.
+# O banco de dados NÃO é criado aqui — use o Neon (gratuito) e cole a connection string
+# na variável DATABASE_URL abaixo (ou direto no painel do Render, em "Environment").
+
+services:
+  - type: web
+    name: crm-cobranca-trapisa-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DATABASE_URL
+        sync: false # cole a connection string do Neon direto no painel do Render
+      - key: DATABASE_SSL
+        value: true
+      - key: FRONTEND_URL
+        sync: false # ex.: https://crm-cobranca-trapisa.pages.dev
+      - key: JWT_SECRET
+        generateValue: true # o Render gera um valor aleatório seguro automaticamente
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: MAX_UPLOAD_SIZE_MB
+        value: 25
+      - key: SEED_ADMIN_NOME
+        sync: false
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_SENHA
+        sync: false
