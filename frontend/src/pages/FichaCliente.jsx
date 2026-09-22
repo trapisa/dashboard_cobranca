@@ -60,6 +60,15 @@ export default function FichaCliente() {
     carregar();
   }
 
+  async function copiarMensagem(texto) {
+    try {
+      await navigator.clipboard.writeText(texto);
+      setMensagem('Mensagem copiada. Cole no seu e-mail/WhatsApp.');
+    } catch {
+      setMensagem('Não foi possível copiar automaticamente. Selecione o texto manualmente.');
+    }
+  }
+
   if (!ficha) return <div>Carregando...</div>;
   const { cliente, contratos, timeline, casosJuridicos } = ficha;
   const podeEditar = ['admin', 'cobranca'].includes(usuario?.perfil);
@@ -91,7 +100,37 @@ export default function FichaCliente() {
           <strong>Régua de cobrança:</strong> cliente está com {reguaSugerida.diasAtraso} dia(s) de atraso — etapa
           sugerida: envio via <strong>{reguaSugerida.etapaSugerida.canal}</strong>
           {reguaSugerida.etapaSugerida.template_nome ? ` usando o template "${reguaSugerida.etapaSugerida.template_nome}"` : ''}.
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+
+          {reguaSugerida.etapaSugerida.template_corpo_preenchido && (
+            <div style={{ marginTop: 10 }}>
+              {reguaSugerida.etapaSugerida.template_assunto_preenchido && (
+                <div style={{ marginBottom: 6 }}>
+                  <strong>Assunto:</strong> {reguaSugerida.etapaSugerida.template_assunto_preenchido}
+                </div>
+              )}
+              <textarea
+                readOnly
+                value={reguaSugerida.etapaSugerida.template_corpo_preenchido}
+                rows={5}
+                style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
+              />
+              <button
+                className="btn secundario"
+                style={{ marginTop: 6 }}
+                onClick={() =>
+                  copiarMensagem(
+                    (reguaSugerida.etapaSugerida.template_assunto_preenchido
+                      ? `Assunto: ${reguaSugerida.etapaSugerida.template_assunto_preenchido}\n\n`
+                      : '') + reguaSugerida.etapaSugerida.template_corpo_preenchido
+                  )
+                }
+              >
+                Copiar mensagem
+              </button>
+            </div>
+          )}
+
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>
             Disparo manual — a equipe de cobrança decide e registra o contato na timeline.
           </div>
         </div>
