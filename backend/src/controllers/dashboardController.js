@@ -2,9 +2,11 @@ const db = require('../config/db');
 
 async function resumo(req, res) {
   try {
+    // Inadimplência total = 'aberto' + 'em_juridico'. Ir para o jurídico não zera a dívida do
+    // cliente, só muda quem está tratando a cobrança — por isso os dois status entram aqui.
     const totalAberto = await db.query(
       `SELECT COUNT(*) AS qtd, COALESCE(SUM(valor_atualizado), 0) AS valor
-       FROM titulos WHERE status = 'aberto'`
+       FROM titulos WHERE status IN ('aberto', 'em_juridico')`
     );
 
     const porEmpreendimento = await db.query(
@@ -12,7 +14,7 @@ async function resumo(req, res) {
        FROM titulos t
        JOIN contratos c ON c.id = t.contrato_id
        JOIN empreendimentos e ON e.id = c.empreendimento_id
-       WHERE t.status = 'aberto'
+       WHERE t.status IN ('aberto', 'em_juridico')
        GROUP BY e.nome
        ORDER BY valor DESC`
     );
@@ -21,7 +23,7 @@ async function resumo(req, res) {
       `SELECT COALESCE(f.nome, 'Sem fundo mapeado') AS nome, COUNT(t.id) AS qtd, COALESCE(SUM(t.valor_atualizado), 0) AS valor
        FROM titulos t
        LEFT JOIN fundos f ON f.id = t.fundo_id
-       WHERE t.status = 'aberto'
+       WHERE t.status IN ('aberto', 'em_juridico')
        GROUP BY f.nome
        ORDER BY valor DESC`
     );
@@ -36,7 +38,7 @@ async function resumo(req, res) {
           COALESCE(SUM(valor_atualizado) FILTER (WHERE (CURRENT_DATE - vencimento) BETWEEN 31 AND 60), 0) AS valor_30_60,
           COALESCE(SUM(valor_atualizado) FILTER (WHERE (CURRENT_DATE - vencimento) BETWEEN 61 AND 90), 0) AS valor_60_90,
           COALESCE(SUM(valor_atualizado) FILTER (WHERE (CURRENT_DATE - vencimento) > 90), 0) AS valor_90_mais
-       FROM titulos WHERE status = 'aberto'`
+       FROM titulos WHERE status IN ('aberto', 'em_juridico')`
     );
 
     const evolucaoMensal = await db.query(
@@ -61,7 +63,7 @@ async function resumo(req, res) {
               COALESCE(SUM(t.valor_atualizado), 0) AS valor_em_aberto
        FROM clientes c
        JOIN contratos ct ON ct.cliente_id = c.id
-       JOIN titulos t ON t.contrato_id = ct.id AND t.status = 'aberto'
+       JOIN titulos t ON t.contrato_id = ct.id AND t.status IN ('aberto', 'em_juridico')
        GROUP BY c.id, c.nome, c.score_atual, c.faixa_prioridade
        ORDER BY c.score_atual DESC, valor_em_aberto DESC
        LIMIT 20`
