@@ -1,5 +1,7 @@
 const db = require('../config/db');
 const auditoria = require('../services/auditoriaService');
+const juridicoAutoService = require('../services/juridicoAutoService');
+const scoreService = require('../services/scoreService');
 
 /**
  * Apaga todos os dados de teste/importação (títulos, contratos, clientes, casos jurídicos,
@@ -49,4 +51,27 @@ async function resetarDadosImportacao(req, res) {
   }
 }
 
-module.exports = { resetarDadosImportacao };
+/**
+ * Roda manualmente, sem precisar subir uma planilha, a verificação de encaminhamento
+ * automático ao jurídico (30+ dias de atraso, e "arrasta" o resto da dívida de quem já está
+ * no jurídico) seguida do recálculo de score. Útil para testar mudanças na régua sem precisar
+ * reimportar a planilha de teste a cada ajuste.
+ */
+async function rodarReguaAgora(req, res) {
+  try {
+    const resultado = await juridicoAutoService.transferirAutomaticamenteParaJuridico();
+    await scoreService.recalcularTodos();
+    await auditoria.registrar({
+      usuarioId: req.usuario.id,
+      acao: 'rodar_regua_manual',
+      entidade: 'sistema',
+      detalhe: resultado,
+    });
+    return res.json({ ok: true, ...resultado, mensagem: 'Régua automática e recálculo de score executados.' });
+  } catch (err) {
+    console.error('Erro ao rodar régua manualmente:', err.message);
+    return res.status(500).json({ erro: 'Erro ao rodar régua automática.' });
+  }
+}
+
+module.exports = { resetarDadosImportacao, rodarReguaAgora };
