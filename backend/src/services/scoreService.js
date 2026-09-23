@@ -10,13 +10,15 @@ function faixaPor(pontos) {
  * Calcula os "fatos" de um cliente usados como campos nas condições de score.
  */
 async function calcularFatosCliente(clienteId) {
+  // Inadimplência total considera 'aberto' e 'em_juridico' — ir para o jurídico não zera a
+  // dívida do cliente, só muda quem está tratando a cobrança.
   const { rows } = await db.query(
     `SELECT
         COALESCE(SUM(t.valor_atualizado), 0) AS valor_total_em_aberto,
         COALESCE(MAX(GREATEST(0, (CURRENT_DATE - t.vencimento))), 0) AS dias_atraso
      FROM titulos t
      JOIN contratos c ON c.id = t.contrato_id
-     WHERE c.cliente_id = $1 AND t.status = 'aberto'`,
+     WHERE c.cliente_id = $1 AND t.status IN ('aberto', 'em_juridico')`,
     [clienteId]
   );
 
