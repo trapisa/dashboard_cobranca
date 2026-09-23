@@ -19,10 +19,12 @@ async function listar(req, res) {
   const where = condicoes.length > 0 ? `WHERE ${condicoes.join(' AND ')}` : '';
 
   try {
+    // Inadimplência total considera títulos 'aberto' e 'em_juridico' — encaminhar ao jurídico
+    // não faz o cliente deixar de estar inadimplente, só muda quem está tratando a cobrança.
     const { rows } = await db.query(
       `SELECT c.id, c.codigo_erp_cliente, c.nome, c.score_atual, c.faixa_prioridade,
-              COALESCE(SUM(t.valor_atualizado) FILTER (WHERE t.status = 'aberto'), 0) AS valor_em_aberto,
-              COUNT(t.id) FILTER (WHERE t.status = 'aberto') AS qtd_titulos_aberto
+              COALESCE(SUM(t.valor_atualizado) FILTER (WHERE t.status IN ('aberto', 'em_juridico')), 0) AS valor_em_aberto,
+              COUNT(t.id) FILTER (WHERE t.status IN ('aberto', 'em_juridico')) AS qtd_titulos_aberto
        FROM clientes c
        LEFT JOIN contratos ct ON ct.cliente_id = c.id
        LEFT JOIN titulos t ON t.contrato_id = ct.id
