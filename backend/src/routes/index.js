@@ -12,6 +12,7 @@ const reguaController = require('../controllers/reguaController');
 const scoreController = require('../controllers/scoreController');
 const juridicoController = require('../controllers/juridicoController');
 const usuariosController = require('../controllers/usuariosController');
+const adminController = require('../controllers/adminController');
 
 const router = express.Router();
 
@@ -72,5 +73,8 @@ router.put('/juridico/casos/:id', autenticar, permitir('admin', 'juridico'), jur
 router.get('/usuarios', autenticar, permitir('admin'), usuariosController.listar);
 router.post('/usuarios', autenticar, permitir('admin'), usuariosController.criar);
 router.put('/usuarios/:id', autenticar, permitir('admin'), usuariosController.atualizar);
+
+// ---------- Admin: reset de dados de teste ----------
+router.post('/admin/resetar-dados', autenticar, permitir('admin'), adminController.resetarDadosImportacao);
 
 module.exports = router;
