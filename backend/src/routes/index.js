@@ -76,5 +76,6 @@ router.put('/usuarios/:id', autenticar, permitir('admin'), usuariosController.at
 
 // ---------- Admin: reset de dados de teste ----------
 router.post('/admin/resetar-dados', autenticar, permitir('admin'), adminController.resetarDadosImportacao);
+router.post('/admin/rodar-regua-agora', autenticar, permitir('admin'), adminController.rodarReguaAgora);
 
 module.exports = router;
