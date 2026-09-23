@@ -101,16 +101,39 @@ async function removerEtapa(req, res) {
  * com base no maior "dias_atraso" de título aberto que seja <= dias de atraso do cliente.
  * O disparo continua manual: aqui só sinalizamos a etapa sugerida.
  */
+function preencherTemplate(texto, variaveis) {
+  if (!texto) return texto;
+  return texto
+    .replace(/\{\{\s*nome_cliente\s*\}\}/gi, variaveis.nomeCliente)
+    .replace(/\{\{\s*valor_devido\s*\}\}/gi, variaveis.valorDevido)
+    .replace(/\{\{\s*vencimento\s*\}\}/gi, variaveis.vencimento);
+}
+
 async function etapaAtualCliente(req, res) {
   const { id } = req.params;
   try {
-    const diasQ = await db.query(
-      `SELECT COALESCE(MAX(CURRENT_DATE - t.vencimento), 0) AS dias_atraso
+    const clienteQ = await db.query('SELECT nome FROM clientes WHERE id = $1', [id]);
+    if (clienteQ.rows.length === 0) return res.status(404).json({ erro: 'Cliente não encontrado.' });
+    const nomeCliente = clienteQ.rows[0].nome;
+
+    const fatosQ = await db.query(
+      `SELECT
+          COALESCE(MAX(CURRENT_DATE - t.vencimento), 0) AS dias_atraso,
+          COALESCE(SUM(t.valor_atualizado), 0) AS valor_total_em_aberto,
+          MAX(t.vencimento) FILTER (
+            WHERE (CURRENT_DATE - t.vencimento) = (
+              SELECT MAX(CURRENT_DATE - t2.vencimento)
+              FROM titulos t2 JOIN contratos c2 ON c2.id = t2.contrato_id
+              WHERE c2.cliente_id = $1 AND t2.status = 'aberto'
+            )
+          ) AS vencimento_mais_atrasado
        FROM titulos t JOIN contratos c ON c.id = t.contrato_id
        WHERE c.cliente_id = $1 AND t.status = 'aberto'`,
       [id]
     );
-    const diasAtraso = Number(diasQ.rows[0].dias_atraso) || 0;
+    const diasAtraso = Number(fatosQ.rows[0].dias_atraso) || 0;
+    const valorDevido = Number(fatosQ.rows[0].valor_total_em_aberto) || 0;
+    const vencimentoMaisAtrasado = fatosQ.rows[0].vencimento_mais_atrasado;
 
     const etapaQ = await db.query(
       `SELECT re.*, tm.nome AS template_nome, tm.corpo AS template_corpo, tm.assunto AS template_assunto
@@ -122,7 +145,23 @@ async function etapaAtualCliente(req, res) {
       [diasAtraso]
     );
 
-    return res.json({ diasAtraso, etapaSugerida: etapaQ.rows[0] || null });
+    let etapaSugerida = etapaQ.rows[0] || null;
+    if (etapaSugerida) {
+      const variaveis = {
+        nomeCliente,
+        valorDevido: valorDevido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+        vencimento: vencimentoMaisAtrasado
+          ? new Date(vencimentoMaisAtrasado).toLocaleDateString('pt-BR')
+          : '-',
+      };
+      etapaSugerida = {
+        ...etapaSugerida,
+        template_assunto_preenchido: preencherTemplate(etapaSugerida.template_assunto, variaveis),
+        template_corpo_preenchido: preencherTemplate(etapaSugerida.template_corpo, variaveis),
+      };
+    }
+
+    return res.json({ diasAtraso, valorDevido, etapaSugerida });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ erro: 'Erro ao calcular etapa da régua.' });

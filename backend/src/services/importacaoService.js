@@ -10,6 +10,7 @@ const COLUNAS_OBRIGATORIAS = [
   'Parcela',
   'Vencim.',
   'Valor Parc.',
+  'Valor Reaj.',
   'Cód. cliente principal',
   'Cliente principal',
   'Status',
@@ -77,6 +78,7 @@ async function lerPlanilha(caminhoArquivo) {
       parcela: get('Parcela'),
       vencimento: get('Vencim.'),
       valorParc: get('Valor Parc.'),
+      valorReaj: get('Valor Reaj.'),
       codClientePrincipal: get('Cód. cliente principal'),
       clientePrincipal: get('Cliente principal'),
       status: get('Status'),
@@ -207,6 +209,9 @@ async function processarImportacao({ importacaoId, caminhoArquivo, usuarioId }) 
         const nomeCliente = linha.clientePrincipal != null ? String(linha.clientePrincipal).trim() : '';
         const vencimento = parseData(linha.vencimento);
         const valorParc = parseValor(linha.valorParc);
+        // "Valor Reaj." (com juros/multa/correção) — se a linha não trouxer, usa o valor original como fallback
+        const valorReajBruto = parseValor(linha.valorReaj);
+        const valorReaj = valorReajBruto !== null ? valorReajBruto : valorParc;
 
         if (!empresa || !venda || !parcela || !codCliente || !nomeCliente || !vencimento || valorParc === null) {
           qtdErros++;
@@ -224,15 +229,15 @@ async function processarImportacao({ importacaoId, caminhoArquivo, usuarioId }) 
         }
 
         const tituloExistente = await client.query(
-          'SELECT id, valor_original, status, fundo_id FROM titulos WHERE contrato_id = $1 AND numero_parcela = $2 AND vencimento = $3',
+          'SELECT id, valor_original, valor_atualizado, status, fundo_id FROM titulos WHERE contrato_id = $1 AND numero_parcela = $2 AND vencimento = $3',
           [contratoId, parcela, vencimento]
         );
 
         if (tituloExistente.rows.length === 0) {
           const inserido = await client.query(
             `INSERT INTO titulos (contrato_id, numero_parcela, vencimento, valor_original, valor_atualizado, status, fundo_id, ultima_importacao_id)
-             VALUES ($1, $2, $3, $4, $4, 'aberto', $5, $6) RETURNING id`,
-            [contratoId, parcela, vencimento, valorParc, fundoId, importacaoId]
+             VALUES ($1, $2, $3, $4, $5, 'aberto', $6, $7) RETURNING id`,
+            [contratoId, parcela, vencimento, valorParc, valorReaj, fundoId, importacaoId]
           );
           titulosVistosIds.add(inserido.rows[0].id);
           qtdNovos++;
@@ -240,24 +245,24 @@ async function processarImportacao({ importacaoId, caminhoArquivo, usuarioId }) 
           await client.query(
             `INSERT INTO timeline_eventos (cliente_id, titulo_id, tipo, descricao)
              VALUES ($1, $2, 'movimentacao', $3)`,
-            [clienteId, inserido.rows[0].id, `Novo título importado: parcela ${parcela}, venc. ${vencimento.toISOString().slice(0, 10)}, valor R$ ${valorParc.toFixed(2)}`]
+            [clienteId, inserido.rows[0].id, `Novo título importado: parcela ${parcela}, venc. ${vencimento.toISOString().slice(0, 10)}, valor original R$ ${valorParc.toFixed(2)}, valor atualizado R$ ${valorReaj.toFixed(2)}`]
           );
         } else {
           const tit = tituloExistente.rows[0];
           titulosVistosIds.add(tit.id);
-          const mudouValor = Number(tit.valor_original) !== valorParc;
+          const mudouValor = Number(tit.valor_original) !== valorParc || Number(tit.valor_atualizado) !== valorReaj;
           const mudouFundo = (tit.fundo_id || null) !== (fundoId || null);
 
           if (mudouValor || mudouFundo) {
             await client.query(
-              `UPDATE titulos SET valor_original = $1, valor_atualizado = $1, fundo_id = $2, ultima_importacao_id = $3, atualizado_em = now()
-               WHERE id = $4`,
-              [valorParc, fundoId, importacaoId, tit.id]
+              `UPDATE titulos SET valor_original = $1, valor_atualizado = $2, fundo_id = $3, ultima_importacao_id = $4, atualizado_em = now()
+               WHERE id = $5`,
+              [valorParc, valorReaj, fundoId, importacaoId, tit.id]
             );
             await client.query(
               `INSERT INTO timeline_eventos (cliente_id, titulo_id, tipo, descricao)
                VALUES ($1, $2, 'movimentacao', $3)`,
-              [clienteId, tit.id, `Título atualizado na importação (valor e/ou fundo alterados).`]
+              [clienteId, tit.id, `Título atualizado na importação (valor original e/ou atualizado e/ou fundo alterados).`]
             );
             qtdAtualizados++;
           } else {
